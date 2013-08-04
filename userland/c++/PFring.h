@@ -1,6 +1,6 @@
 /*
  *
- * (C) 2007-12 - Luca Deri <deri@ntop.org>
+ * (C) 2007-08 - Luca Deri <deri@ntop.org>
  *
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,23 +30,23 @@ extern "C" {
 
 class PFring {
  private:
-  pfring *ring;
+  struct pcap *pcapPtr;
   u_int snaplen;
   char *device_name;
 
  public:
-  PFring(char* device, u_int snaplen, u_int flags = 0);
+  PFring(char* device, u_int snaplen, bool promisc, char *bpf = NULL);
   ~PFring();
 
   /* Cluster */
   inline int set_cluster(u_int clusterId)
-  { return(ring ? pfring_set_cluster(ring, clusterId, cluster_round_robin) : -1); };
+  { return((pcapPtr && pcapPtr->ring) ? pfring_set_cluster(pcapPtr->ring, clusterId, cluster_round_robin) : -1); };
   inline int remove_from_cluster()               
-  { return(ring ? pfring_remove_from_cluster(ring) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_remove_from_cluster(pcapPtr->ring) : -1);    };
 
   /* Channel */
   inline int set_channel_id(short channelId)
-  { return(ring ? pfring_set_channel_id(ring, channelId) : -1); };
+  { return((pcapPtr && pcapPtr->ring) ? pfring_set_channel_id(pcapPtr->ring, channelId) : -1); };
 
   /* Read Packets */
   bool wait_for_packets(int msec = -1 /* -1 == infinite */);
@@ -55,32 +55,62 @@ class PFring {
   /* Filtering */
   int add_bpf_filter(char *the_filter);
   inline int add_filtering_rule(filtering_rule* the_rule) 
-    { return(ring ? pfring_add_filtering_rule(ring, the_rule) : -1);   };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_add_filtering_rule(pcapPtr->ring, the_rule) : -1);   };
   inline int remove_filtering_rule(u_int16_t rule_id)     
-    { return(ring ? pfring_remove_filtering_rule(ring, rule_id) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_remove_filtering_rule(pcapPtr->ring, rule_id) : -1); };
   inline int toggle_filtering_policy(bool rules_default_accept_policy)
-    { return(ring ? pfring_toggle_filtering_policy(ring, rules_default_accept_policy ? 1 : 0) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_toggle_filtering_policy(pcapPtr->ring, rules_default_accept_policy ? 1 : 0) : -1); };
   inline int add_hash_filtering_rule(hash_filtering_rule *rule)
-    { return(ring ? pfring_handle_hash_filtering_rule(ring, rule, 1) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_handle_hash_filtering_rule(pcapPtr->ring, rule, 1) : -1); };
   inline int remove_hash_filtering_rule(hash_filtering_rule *rule)
-    { return(ring ? pfring_handle_hash_filtering_rule(ring, rule, 0) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_handle_hash_filtering_rule(pcapPtr->ring, rule, 0) : -1); };
+
 
   /* Stats */
   inline int get_stats(pfring_stat *stats)
-    { return(ring ? pfring_stats(ring, stats) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_stats(pcapPtr->ring, stats) : -1); };
   inline int get_filtering_rule_stats(u_int16_t rule_id, char *stats, u_int *stats_len)
-    { return(ring ? pfring_get_filtering_rule_stats(ring, rule_id, stats, stats_len) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_get_filtering_rule_stats(pcapPtr->ring, rule_id, stats, stats_len) : -1); };
   inline int get_hash_filtering_rule_stats(hash_filtering_rule* rule, char *stats, u_int *stats_len)
-    { return(ring ? pfring_get_hash_filtering_rule_stats(ring, rule, stats, stats_len) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_get_hash_filtering_rule_stats(pcapPtr->ring, rule, stats, stats_len) : -1); };
 
   /* Utils */
   inline char* get_device_name() { return(device_name); };
-  inline int enable_ring()       { return(ring ? pfring_enable_ring(ring) : -1); };
   inline int set_sampling_rate(u_int32_t rate /* 1 = no sampling */)
-    { return(ring ? pfring_set_sampling_rate(ring, rate) : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_set_sampling_rate(pcapPtr->ring, rate) : -1); };
   inline int get_version(u_int32_t *version) 
-    { return(ring ? pfring_version(ring, version) : -1); };
-  inline int get_socket_id()  { return(ring ? ring->fd : -1); };
+    { return((pcapPtr && pcapPtr->ring) ? pfring_version(pcapPtr->ring, version) : -1); };
+  inline int get_socket_id() 
+    { return((pcapPtr && pcapPtr->ring) ? pcapPtr->ring->fd : pcap_get_selectable_fd(pcapPtr)); };
+  inline struct pcap* get_pcap() { return(pcapPtr); };
+  inline const char* get_last_error() { return(pcapPtr ? pcap_geterr(pcapPtr) : "Device open has failed"); };
+  
+  /* SipFish */
+     inline int set_application_name(char *application_name)
+     { return(pfring_set_application_name(pcapPtr->ring, application_name)); };
+
+     inline void pfring_pfring_config(u_short cpu_percentage)
+     { return(pfring_config(cpu_percentage)); };
+
+     inline u_int8_t pfring_pfring_get_num_rx_channels(pfring *ring)
+     { return(pfring_get_num_rx_channels(pcapPtr->ring));};
+
+     inline int pfring_pfring_loop(pfringProcesssPacket looper, const u_char *user_bytes, u_int8_t wait_for_packet)
+     { return(pfring_loop(pcapPtr->ring,looper,user_bytes,wait_for_packet)); };
+
+     inline int pfring_pfring_enable_ring()
+     { return(pfring_enable_ring(pcapPtr->ring)); };
+
+     inline int pfring_pfring_purge_idle_rules(u_int16_t inactivity_sec)
+     { return(pfring_purge_idle_rules(pcapPtr->ring, inactivity_sec));};
+
+
+      inline int set_poll_watermark(u_int16_t watermark)
+      { return(pfring_set_poll_watermark(pcapPtr->ring,watermark));};
+
+      inline int set_poll_duration(u_int16_t duration)
+      { return(pfring_set_poll_duration(pcapPtr->ring,duration));};
+
 };
 
 #endif /* _PFRING_CLASS_ */

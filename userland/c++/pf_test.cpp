@@ -36,7 +36,7 @@ int main(int argc, char *argv[]) {
     return(0);
   }
 
-  ring->enable_ring();
+  ring->pfring_pfring_enable_ring();
 
   if(add_rule) {
     filtering_rule the_rule;
